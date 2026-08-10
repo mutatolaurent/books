@@ -14,6 +14,7 @@ use Symfony\Component\Serializer\SerializerInterface;
 use App\Entity\Author;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Serializer\Exception\NotNormalizableValueException;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class AuthorController extends AbstractController
 {
@@ -55,7 +56,8 @@ final class AuthorController extends AbstractController
         SerializerInterface $serializer,
         EntityManagerInterface $em,
         UrlGeneratorInterface $urlGenerator,
-        BookRepository $bookRepository // Injection du BookRepository
+        BookRepository $bookRepository,
+        ValidatorInterface $validator
     ): JsonResponse {
         $content = $request->getContent();
 
@@ -65,6 +67,13 @@ final class AuthorController extends AbstractController
         } catch (NotNormalizableValueException $e) {
             // Gérer les erreurs de désérialisation si les données ne correspondent pas à l'entité Author
             return new JsonResponse(['error' => 'Invalid data provided for Author creation: ' . $e->getMessage()], Response::HTTP_BAD_REQUEST);
+        }
+
+        // On vérifie les erreurs
+        $errors = $validator->validate($author);
+
+        if ($errors->count() > 0) {
+            return new JsonResponse($serializer->serialize($errors, 'json'), JsonResponse::HTTP_BAD_REQUEST, [], true);
         }
 
         // Décoder le JSON pour récupérer les bookIds manuellement

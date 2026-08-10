@@ -14,6 +14,7 @@ use Symfony\Component\Serializer\Normalizer\AbstractNormalizer;
 use App\Entity\Book;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class BookController extends AbstractController
 {
@@ -50,12 +51,25 @@ class BookController extends AbstractController
     }
 
     #[Route('/api/books', name:"createBook", methods: ['POST'])]
-    public function createBook(Request $request, SerializerInterface $serializer, EntityManagerInterface $em, UrlGeneratorInterface $urlGenerator, AuthorRepository $authorRepository): JsonResponse
-    {
+    public function createBook(
+        Request $request,
+        SerializerInterface $serializer,
+        EntityManagerInterface $em,
+        UrlGeneratorInterface $urlGenerator,
+        AuthorRepository $authorRepository,
+        ValidatorInterface $validator
+    ): JsonResponse {
         $book = $serializer->deserialize($request->getContent(), Book::class, 'json');
 
         // Récupération de l'ensemble des données envoyées sous forme de tableau
         $content = $request->toArray();
+
+        // On vérifie les erreurs
+        $errors = $validator->validate($book);
+
+        if ($errors->count() > 0) {
+            return new JsonResponse($serializer->serialize($errors, 'json'), JsonResponse::HTTP_BAD_REQUEST, [], true);
+        }
 
         // Récupération de l'idAuthor. S'il n'est pas défini, alors on met -1 par défaut.
         $idAuthor = $content['idAuthor'] ?? -1;
