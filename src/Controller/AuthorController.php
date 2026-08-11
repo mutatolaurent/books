@@ -18,6 +18,13 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 final class AuthorController extends AbstractController
 {
+    /**
+     * Cette méthode permet de récupérer l'ensemble des auteurs.
+     *
+     * @param AuthorRepository $authorRepository
+     * @param SerializerInterface $serializer
+     * @return JsonResponse
+     */
     #[Route('/api/authors', name: 'author', methods: ['GET'])]
     public function getAllAuthor(AuthorRepository $authorRepository, SerializerInterface $serializer): JsonResponse
     {
@@ -27,6 +34,13 @@ final class AuthorController extends AbstractController
         return new JsonResponse($jsonAuthorList, Response::HTTP_OK, [], true);
     }
 
+    /**
+     * Cette méthode permet de récupérer un auteur en particulier en fonction de son id.
+     *
+     * @param Author $author
+     * @param SerializerInterface $serializer
+     * @return JsonResponse
+     */
     #[Route('/api/authors/{id}', name: 'detailAuthor', methods: ['GET'])]
     public function getAuthor(Author $author, SerializerInterface $serializer): JsonResponse
     {
@@ -41,6 +55,23 @@ final class AuthorController extends AbstractController
         return new JsonResponse(null, Response::HTTP_NOT_FOUND);
     }
 
+    /**
+     * Cette méthode supprime un auteur en fonction de son id.
+     * En cascade, les livres associés aux auteurs seront aux aussi supprimés.
+     *
+     * /!\ Attention /!\
+     * pour éviter le problème :
+     * "1451 Cannot delete or update a parent row: a foreign key constraint fails"
+     * Il faut bien penser rajouter dans l'entité Author, au niveau de la propriété Books, l'option "orphanRemoval=true" dans l'annotation :
+     * #[ORM\OneToMany(targetEntity: Book::class, mappedBy: 'author', orphanRemoval: true)]
+     *
+     * Et resynchronizer la base de données pour appliquer ces modifications.
+     * avec : php bin/console doctrine:schema:update --force
+     *
+     * @param Author $author
+     * @param EntityManagerInterface $em
+     * @return JsonResponse
+     */
     #[Route('/api/authors/{id}', name: 'deleteAuthor', methods: ['DELETE'])]
     public function deleteBook(Author $author, EntityManagerInterface $em): JsonResponse
     {
@@ -50,6 +81,32 @@ final class AuthorController extends AbstractController
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
 
+    /**
+     * Cette méthode permet de créer un nouvel auteur. Elle ne permet pas
+     * d'associer directement des livres à cet auteur.
+     * Exemple de données :
+     * {
+     *      "lastName": "Malinger",
+     *      "firstName": "Jean",
+     *      "bookIds": [112, 123, 467]
+     * }
+     *
+     * Le paramètre bookIds est géré "à la main", pour créer l'association
+     * entre un auteur et ses livres. Il est optionnel, et peut être vide.
+     * S'il est vide, alors l'auteur sera créé sans livres associés.
+     * S'il contient des id de livres, alors ces livres seront associés à l'auteur.
+     * S'il contient des id de livres qui n'existent pas, alors une erreur sera renvoyée.
+     * S'il contient des id de livres qui existent déjà mais qui sont associés à un autre auteur, alors une erreur sera renvoyée.
+     * S'il contient des id de livres qui existent déjà mais qui sont associés à cet auteur, alors ces livres seront simplement ignorés.
+     *
+     * @param Request $request
+     * @param SerializerInterface $serializer
+     * @param EntityManagerInterface $em
+     * @param UrlGeneratorInterface $urlGenerator
+     * @param BookRepository $bookRepository
+     * @param ValidatorInterface $validator
+     * @return JsonResponse
+     */
     #[Route('/api/authors', name:"createAuthor", methods: ['POST'])] // Renommé la route et la méthode
     public function createAuthor(
         Request $request,
@@ -111,6 +168,31 @@ final class AuthorController extends AbstractController
         return new JsonResponse($jsonAuthor, Response::HTTP_CREATED, ["Location" => $location], true);
     }
 
+    /**
+     * Cette méthode permet de mettre à jour un auteur.
+     * Exemple de données :
+     * {
+     *      "lastName": "Malinger",
+     *      "firstName": "Jean",
+     *      "bookIds": [112, 123, 467]
+     * }
+     *
+     * Le paramètre bookIds est géré "à la main", pour créer l'association
+     * entre un auteur et ses livres. Il est optionnel, et peut être vide.
+     * S'il est vide, alors l'auteur sera mis à jour sans livres associés.
+     * S'il contient des id de livres, alors ces livres seront associés à l'auteur.
+     * S'il contient des id de livres qui n'existent pas, alors une erreur sera renvoyée.
+     * S'il contient des id de livres qui existent déjà mais qui sont associés à un autre auteur, alors une erreur sera renvoyée.
+     * S'il contient des id de livres qui existent déjà mais qui sont associés à cet auteur, alors ces livres seront simplement ignorés
+     *
+     *
+     * @param Request $request
+     * @param SerializerInterface $serializer
+     * @param Author $currentAuthor
+     * @param EntityManagerInterface $em
+     * @param BookRepository $bookRepository
+     * @return JsonResponse
+     */
     #[Route('/api/authors/{id}', name: 'updateAuthor', methods: ['PUT'])]
     public function updateAuthor(
         Author $author, // L'auteur existant est injecté par le ParamConverter
