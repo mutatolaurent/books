@@ -16,6 +16,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\Cache\TagAwareCacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 
 class BookController extends AbstractController
 {
@@ -27,11 +29,36 @@ class BookController extends AbstractController
      * @return JsonResponse
      */
     #[Route('/api/books', name: 'book', methods: ['GET'])]
-    public function getBookList(BookRepository $bookRepository, SerializerInterface $serializer): JsonResponse
-    {
-        $bookList = $bookRepository->findAll();
+    public function getBookList(
+        BookRepository $bookRepository,
+        SerializerInterface $serializer,
+        Request $request,
+        TagAwareCacheInterface $cachePool
+    ): JsonResponse {
+        // $bookList = $bookRepository->findAll();
 
-        $jsonBookList = $serializer->serialize($bookList, 'json', ['groups' => 'getBooks']);
+        // Récupération des paramètres de pagination depuis la requête. Si aucun paramètre n'est fourni, on utilise les valeurs par défaut (page 1, limite 3).
+        $page = $request->query->get('page', 1);
+        $limit = $request->query->get('limit', 3);
+
+        // Création d'un identifiant unique pour le cache basé sur la page et la limite
+        $idCache = "getAllBooks-" . $page . "-" . $limit;
+
+        // Utilisation du cache pour stocker et récupérer les résultats de la requête
+        $jsonBookList = $cachePool->get($idCache, function (ItemInterface $item) use ($bookRepository, $page, $limit, $serializer) {
+            echo("L'ELEMENT N'EST PAS ENCORE EN CACHE!\n");
+            $item->tag("booksCache");
+            $bookList = $bookRepository->findAllWithPagination($page, $limit);
+            return $serializer->serialize($bookList, 'json', ['groups' => 'getBooks']);
+
+        });
+
+        // $bookList = $bookRepository->findAllWithPagination($page, $limit);
+
+        // Sérialisation de la liste des livres en JSON avec le groupe de sérialisation "getBooks"
+        //$jsonBookList = $serializer->serialize($bookList, 'json', ['groups' => 'getBooks']);
+
+        // Retourne la réponse JSON avec le code de statut HTTP 200 (OK) et le contenu sérialisé
         return new JsonResponse($jsonBookList, Response::HTTP_OK, [], true);
     }
 
@@ -64,8 +91,12 @@ class BookController extends AbstractController
      * @return JsonResponse
      */
     #[Route('/api/books/{id}', name: 'deleteBook', methods: ['DELETE'])]
-    public function deleteBook(Book $book, EntityManagerInterface $em): JsonResponse
+    public function deleteBook(Book $book, EntityManagerInterface $em, TagAwareCacheInterface $cachePool): JsonResponse
     {
+        // Invalidation du cache pour s'assurer que les données supprimées ne sont plus accessibles
+        $cachePool->invalidateTags(["booksCache"]);
+
+        // suppression du livre de la base de données
         $em->remove($book);
         $em->flush();
 

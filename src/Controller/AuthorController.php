@@ -15,6 +15,9 @@ use App\Entity\Author;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Serializer\Exception\NotNormalizableValueException;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Contracts\Cache\TagAwareCacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 
 final class AuthorController extends AbstractController
 {
@@ -26,11 +29,32 @@ final class AuthorController extends AbstractController
      * @return JsonResponse
      */
     #[Route('/api/authors', name: 'author', methods: ['GET'])]
-    public function getAllAuthor(AuthorRepository $authorRepository, SerializerInterface $serializer): JsonResponse
-    {
-        $authorList = $authorRepository->findAll();
+    public function getAllAuthor(
+        AuthorRepository $authorRepository,
+        SerializerInterface $serializer,
+        Request $request,
+        TagAwareCacheInterface $cachePool
+    ): JsonResponse {
+        //$authorList = $authorRepository->findAll();
 
-        $jsonAuthorList = $serializer->serialize($authorList, 'json', ['groups' => 'getAuthors']);
+        // Récupération des paramètres de pagination depuis la requête. Si aucun paramètre n'est fourni, on utilise les valeurs par défaut (page 1, limite 3).
+        $page = $request->query->get('page', 1);
+        $limit = $request->query->get('limit', 3);
+
+        // Création d'un identifiant unique pour le cache basé sur la page et la limite
+        $idCache = "getAllAuthors-" . $page . "-" . $limit;
+
+        // Utilisation du cache pour stocker et récupérer les résultats de la requête
+        $jsonAuthorList = $cachePool->get($idCache, function (ItemInterface $item) use ($authorRepository, $page, $limit, $serializer) {
+            echo("L'ELEMENT N'EST PAS ENCORE EN CACHE!\n");
+            $item->tag("authorsCache");
+            $authorList = $authorRepository->findAllWithPagination($page, $limit);
+            return $serializer->serialize($authorList, 'json', ['groups' => 'getAuthors']);
+
+        });
+
+
+        //$jsonAuthorList = $serializer->serialize($authorList, 'json', ['groups' => 'getAuthors']);
         return new JsonResponse($jsonAuthorList, Response::HTTP_OK, [], true);
     }
 
@@ -73,8 +97,11 @@ final class AuthorController extends AbstractController
      * @return JsonResponse
      */
     #[Route('/api/authors/{id}', name: 'deleteAuthor', methods: ['DELETE'])]
-    public function deleteBook(Author $author, EntityManagerInterface $em): JsonResponse
+    public function deleteBook(Author $author, EntityManagerInterface $em, TagAwareCacheInterface $cachePool): JsonResponse
     {
+        // Invalidation du cache pour s'assurer que les données supprimées ne sont plus accessibles
+        $cachePool->invalidateTags(["authorsCache"]);
+
         $em->remove($author);
         $em->flush();
 
@@ -107,7 +134,8 @@ final class AuthorController extends AbstractController
      * @param ValidatorInterface $validator
      * @return JsonResponse
      */
-    #[Route('/api/authors', name:"createAuthor", methods: ['POST'])] // Renommé la route et la méthode
+    #[Route('/api/authors', name:"createAuthor", methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN', message: 'Vous n\'avez pas les droits suffisants pour créer un auteur')]
     public function createAuthor(
         Request $request,
         SerializerInterface $serializer,
@@ -188,7 +216,7 @@ final class AuthorController extends AbstractController
      *
      * @param Request $request
      * @param SerializerInterface $serializer
-     * @param Author $currentAuthor
+     * @param Author $author
      * @param EntityManagerInterface $em
      * @param BookRepository $bookRepository
      * @return JsonResponse
