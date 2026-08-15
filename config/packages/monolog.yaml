@@ -1,0 +1,28 @@
+# config/packages/monolog.yaml
+
+monolog:
+    channels: ["app", "request", "doctrine"] # Liste des canaux à conserver, ou ajoutez 'custom_errors' si vous voulez un canal spécifique
+    handlers:
+        # Configuration par défaut pour les logs de développement (si vous la conservez)
+        # main:
+        #     type: stream
+        #     path: "%kernel.logs_dir%/%kernel.environment%.log"
+        #     level: debug
+        #     process_psr_3_messages: false
+        #     channels: ["!event"] # Exclure les logs d'événements pour alléger
+
+        # Ajoutez votre gestionnaire de logs d'erreurs personnalisé ici
+        custom_errors:
+            type: stream
+            path: "%kernel.logs_dir%/custom_errors.log" # Chemin vers votre fichier de log personnalisé
+            level: error # Ne loguer que les messages de niveau "error" et supérieur (critical, alert, emergency)
+            channels: ["!event", "!doctrine", "!console"] # Exclut les messages des canaux 'event', 'doctrine' et 'console'
+            # Si vous voulez loguer toutes les erreurs de l'application :
+            # channels: ["!event", "!doctrine", "!console"]
+
+            # Si vous voulez un canal totalement dédié à vos erreurs personnalisées,
+            # vous pouvez créer un canal spécifique et le lier ici :
+            # type: stream
+            # path: "%kernel.logs_dir%/my_app_errors.log"
+            # level: error
+            # channels: ["my_app_errors"] # Loguer uniquement les messages envoyés au canal "my_app_errors"

@@ -6,16 +6,50 @@ use App\Repository\AuthorRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Serializer\Attribute\Groups;
+// use Symfony\Component\Serializer\Attribute\Groups;
+use JMS\Serializer\Annotation\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
+use Hateoas\Configuration\Annotation as Hateoas;
+use JMS\Serializer\Annotation as Serializer;
+use ApiPlatform\Metadata\ApiResource;
 
+#[Serializer\XmlRoot('author')]
+#[Hateoas\Relation('self', href: "expr('/api/authors/' ~ object.getId())", exclusion: new Hateoas\Exclusion(groups: ['getAuthors']))]
+#[Hateoas\Relation(
+    name: 'delete',
+    href: new Hateoas\Route(
+        name: 'deleteAuthor',
+        parameters: [
+            'id' => "expr(object.getId())"
+        ]
+    ),
+    exclusion: new Hateoas\Exclusion(
+        groups: ['getAuthors'],
+        excludeIf: "expr(not is_granted('ROLE_ADMIN'))"
+    )
+)]
+#[Hateoas\Relation(
+    name: 'update',
+    href: new Hateoas\Route(
+        name: 'updateAuthor',
+        parameters: [
+            'id' => "expr(object.getId())"
+        ]
+    ),
+    exclusion: new Hateoas\Exclusion(
+        groups: ['getAuthors'],
+        excludeIf: "expr(not is_granted('ROLE_ADMIN'))"
+    )
+)]
 #[ORM\Entity(repositoryClass: AuthorRepository::class)]
+#[ApiResource()]
 class Author
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     #[Groups(["getBooks","getAuthors"])]
+    #[Serializer\XmlAttribute]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
